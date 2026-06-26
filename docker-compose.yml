@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  dbadmin:
+    build: .
+    container_name: dbadmin-cli
+    stdin_open: true # Mantiene stdin abierto para interacción (interactivo)
+    tty: true        # Habilita terminal tty para los menús rich
+    volumes:
+      # Montaje del socket de Docker para permitir validación en sandbox local
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Montaje del volumen de trabajo para compartir archivos de base de datos
+      - .:/app

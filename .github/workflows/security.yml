@@ -1,0 +1,31 @@
+name: Seguridad y Calidad de Código
+
+on:
+  push:
+    branches: [ "main", "master", "dev" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  snyk-scan:
+    name: Escaneo de Vulnerabilidades
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Ejecutar Snyk para buscar vulnerabilidades
+        uses: snyk/actions/python@master
+        continue-on-error: true # Para que no bloquee tu avance si encuentra algo, pero que el reporte aparezca
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}

@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#07111f" />
+  <title>DBAdmin CLI | Descargas y Documentación</title>
+  <style>
+    :root {
+      --bg: #06111f;
+      --bg-2: #0b1729;
+      --panel: rgba(9, 19, 34, 0.82);
+      --panel-strong: #0e1b30;
+      --line: rgba(148, 163, 184, 0.18);
+      --text: #e5edf7;
+      --muted: #9fb0c7;
+      --accent: #58a6ff;
+      --accent-2: #7ee787;
+      --accent-3: #fbbf24;
+      --danger: #ff7b72;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+      --radius: 24px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(88, 166, 255, 0.18), transparent 26%),
+        radial-gradient(circle at 85% 10%, rgba(126, 231, 135, 0.12), transparent 24%),
+        linear-gradient(180deg, #040912 0%, var(--bg) 40%, #040912 100%);
+      font-family: Inter, Segoe UI, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 56px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 18px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(8, 16, 29, 0.6);
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .brand img {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      object-fit: cover;
+      background: #fff;
+    }
+
+    .brand strong { display: block; font-size: 1rem; letter-spacing: 0.04em; }
+    .brand span { color: var(--muted); font-size: 0.92rem; }
+
+    .nav {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .chip {
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      text-decoration: none;
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-weight: 600;
+      transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .chip:hover { transform: translateY(-1px); border-color: rgba(88, 166, 255, 0.45); background: rgba(88, 166, 255, 0.08); }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 32px;
+      background: linear-gradient(135deg, rgba(10, 18, 32, 0.92), rgba(13, 28, 50, 0.9));
+      box-shadow: var(--shadow);
+      padding: 40px;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -120px -120px auto;
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(88, 166, 255, 0.2) 0%, transparent 68%);
+      pointer-events: none;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 0.9fr;
+      gap: 28px;
+      align-items: center;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid rgba(126, 231, 135, 0.22);
+      background: rgba(126, 231, 135, 0.08);
+      color: #c8facc;
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.5rem, 6vw, 4.8rem);
+      line-height: 0.96;
+      letter-spacing: -0.06em;
+    }
+
+    .lead {
+      margin: 18px 0 0;
+      max-width: 62ch;
+      font-size: 1.08rem;
+      color: var(--muted);
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 28px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid transparent;
+      border-radius: 16px;
+      padding: 14px 18px;
+      text-decoration: none;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .btn:hover { transform: translateY(-2px); }
+    .btn-primary {
+      color: #04111f;
+      background: linear-gradient(135deg, #7ee787, #58a6ff);
+      box-shadow: 0 18px 38px rgba(88, 166, 255, 0.25);
+    }
+    .btn-secondary {
+      color: var(--text);
+      border-color: var(--line);
+      background: rgba(255,255,255,0.04);
+    }
+
+    .btn-ghost {
+      color: var(--text);
+      border-color: rgba(88, 166, 255, 0.22);
+      background: rgba(88, 166, 255, 0.08);
+    }
+
+    .hero-card {
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 26px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+      padding: 24px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(7, 13, 24, 0.72);
+      padding: 18px;
+      min-height: 106px;
+    }
+
+    .stat small { color: var(--muted); display: block; margin-bottom: 8px; }
+    .stat strong { display: block; font-size: 2rem; line-height: 1; }
+    .stat span { color: var(--muted); font-size: 0.92rem; }
+
+    .section {
+      margin-top: 24px;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: var(--panel);
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow);
+      padding: 28px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .section-header h2 {
+      margin: 0;
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      letter-spacing: -0.03em;
+    }
+
+    .section-header p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      max-width: 68ch;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255,255,255,0.03);
+      padding: 20px;
+    }
+
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 1.05rem;
+    }
+
+    .card p,
+    .doc-copy p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .download-panel {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: center;
+      border-radius: 24px;
+      padding: 22px;
+      border: 1px solid rgba(126, 231, 135, 0.18);
+      background: linear-gradient(135deg, rgba(126, 231, 135, 0.08), rgba(88, 166, 255, 0.08));
+    }
+
+    .download-panel .counter {
+      text-align: right;
+      min-width: 180px;
+    }
+
+    .download-panel .counter strong {
+      display: block;
+      font-size: 2.6rem;
+      line-height: 1;
+      color: var(--accent-2);
+    }
+
+    .download-panel .counter small { color: var(--muted); }
+
+    .docs {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 18px;
+    }
+
+    .codebox {
+      margin-top: 12px;
+      padding: 18px;
+      border-radius: 20px;
+      background: #08111d;
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      overflow: auto;
+      font-family: Consolas, Monaco, 'Courier New', monospace;
+      color: #dce7f6;
+    }
+
+    .codebox .prompt { color: #7ee787; }
+    .codebox .cmd { color: #58a6ff; }
+    .codebox .muted { color: #8ea1b7; }
+    .codebox .warn { color: #fbbf24; }
+
+    details {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(255,255,255,0.03);
+      padding: 16px 18px;
+    }
+
+    details summary {
+      cursor: pointer;
+      font-weight: 800;
+      color: var(--text);
+      list-style: none;
+    }
+
+    details summary::-webkit-details-marker { display: none; }
+
+    .doc-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .doc-item {
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      border-radius: 16px;
+      padding: 14px;
+      background: rgba(7, 13, 24, 0.55);
+    }
+
+    .doc-item strong { display: block; margin-bottom: 4px; }
+    .doc-item span { color: var(--muted); font-size: 0.95rem; }
+
+    .admin-box {
+      margin-top: 14px;
+      border: 1px solid rgba(88, 166, 255, 0.18);
+      border-radius: 22px;
+      background: rgba(5, 10, 18, 0.62);
+      overflow: hidden;
+    }
+
+    .admin-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 20px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+      background: rgba(255,255,255,0.03);
+    }
+
+    .admin-head small { color: var(--muted); }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 620px;
+    }
+
+    th, td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+      vertical-align: top;
+      font-size: 0.96rem;
+    }
+
+    th { color: #dfe9f7; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; }
+    td { color: #c7d4e5; }
+    td.muted { color: var(--muted); }
+
+    .footer {
+      text-align: center;
+      color: var(--muted);
+      padding: 30px 0 10px;
+      font-size: 0.95rem;
+    }
+
+    .floating-top {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      width: 52px;
+      height: 52px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 16px;
+      border: 1px solid rgba(88, 166, 255, 0.28);
+      background: linear-gradient(135deg, rgba(88, 166, 255, 0.22), rgba(126, 231, 135, 0.18));
+      color: var(--text);
+      text-decoration: none;
+      box-shadow: var(--shadow);
+      z-index: 30;
+      font-size: 1.3rem;
+    }
+
+    .admin-entry {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: end;
+      margin-top: 14px;
+    }
+
+    .admin-entry input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: rgba(7, 13, 24, 0.72);
+      color: var(--text);
+      font-size: 1rem;
+      outline: none;
+    }
+
+    .admin-entry input:focus {
+      border-color: rgba(88, 166, 255, 0.55);
+      box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.12);
+    }
+
+    .notice {
+      border: 1px dashed rgba(88, 166, 255, 0.28);
+      background: rgba(88, 166, 255, 0.06);
+      color: var(--muted);
+      border-radius: 18px;
+      padding: 16px;
+      margin-top: 12px;
+    }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 920px) {
+      .hero-grid, .docs, .grid-3, .download-panel {
+        grid-template-columns: 1fr;
+      }
+
+      .download-panel .counter {
+        text-align: left;
+        min-width: 0;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .shell { width: min(100% - 18px, 1180px); }
+      .hero, .section { padding: 18px; border-radius: 22px; }
+      .topbar { border-radius: 22px; padding: 14px; align-items: flex-start; }
+      .nav { justify-content: flex-start; }
+      .stats { grid-template-columns: 1fr; }
+      h1 { font-size: 2.4rem; }
+      .floating-top { right: 12px; bottom: 12px; }
+      .admin-entry { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <img src="/logo-upt.png" alt="UPT" />
+        <div>
+          <strong>DBAdmin CLI</strong>
+          <span>Documentación, descarga y panel admin</span>
+        </div>
+      </div>
+      <nav class="nav">
+        <a class="chip" href="#inicio">Inicio</a>
+        <a class="chip" href="#docs">Documentación</a>
+        <a class="chip" href="#descargas">Descargas</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" id="inicio">
+        <div class="hero-grid">
+          <div>
+            <div class="eyebrow">CLI profesional para bases de datos</div>
+            <h1>Gestiona, migra y valida bases de datos desde una sola herramienta.</h1>
+            <p class="lead">
+              DBAdmin reúne administración relacional, soporte NoSQL, migración ETL y validación de backups en Docker.
+              Esta landing sirve como presentación, documentación y punto de descarga del ejecutable.
+            </p>
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="#docs">Ver documentación</a>
+              <a class="btn btn-secondary" href="#descargas">Ir a descargas</a>
+              <a class="btn btn-secondary" href="#admin">Panel admin</a>
+            </div>
+          </div>
+
+          <div class="hero-card">
+            <div class="stats">
+              <div class="stat">
+                <small>Descargas registradas</small>
+                <strong id="downloadCount">0</strong>
+                <span>contador local con SQLite</span>
+              </div>
+              <div class="stat">
+                <small>Estado</small>
+                <strong>Ready</strong>
+                <span>landing + API local</span>
+              </div>
+            </div>
+            <div class="doc-copy">
+              <p>
+                La página está pensada para una presentación clara: primero explica el valor de la herramienta,
+                luego muestra la documentación y por último activa la descarga con un registro de IPs para el admin.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-label="Resumen">
+        <div class="grid-3">
+          <div class="card">
+            <h3>Cliente</h3>
+            <p>Portada visual, documentación resumida y descarga directa del .exe con contador automático.</p>
+          </div>
+          <div class="card">
+            <h3>Admin</h3>
+            <p>Lista de IPs, fecha y user-agent de cada descarga, guardado en SQLite local.</p>
+          </div>
+          <div class="card">
+            <h3>Simple</h3>
+            <p>Sin servicios externos. Todo corre desde <span class="muted">media/</span> con una sola app Python.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="descargas">
+        <div class="section-header">
+          <div>
+            <h2>Descargas</h2>
+            <p>El botón llama al backend local, incrementa el contador y entrega el ejecutable <strong>DB-CLI.exe</strong>.</p>
+          </div>
+        </div>
+
+        <div class="download-panel">
+          <div>
+            <h3 style="margin:0 0 8px; font-size:1.35rem;">Descargar ejecutable</h3>
+            <p style="margin:0; color:var(--muted);">Al presionar el botón, el servidor registra la IP, el momento de la descarga y el navegador usado.</p>
+          </div>
+          <div class="counter">
+            <strong id="downloadCountLarge">0</strong>
+            <small>descargas acumuladas</small>
+          </div>
+        </div>
+
+        <div class="hero-actions" style="margin-top:18px;">
+          <a class="btn btn-primary" id="downloadBtn" href="/download">⬇ Descargar DB-CLI.exe</a>
+          <a class="btn btn-secondary" href="/DB-CLI.exe">Abrir archivo directo</a>
+        </div>
+      </section>
+
+      <section class="section" id="docs">
+        <div class="section-header">
+          <div>
+            <h2>Documentación</h2>
+            <p>Resumen práctico de los comandos principales para demo y presentación.</p>
+          </div>
+        </div>
+
+        <div class="docs">
+          <div>
+            <details open>
+              <summary>Modo relacional</summary>
+              <div class="doc-list">
+                <div class="doc-item">
+                  <strong>Conectar a MySQL</strong>
+                  <span><span class="muted">dbcli-rel &gt;</span> <span class="cmd">connect mysql</span> <span class="muted">olimpiadas_upt root 75236233</span></span>
+                </div>
+                <div class="doc-item">
+                  <strong>Consultar tablas</strong>
+                  <span><span class="muted">dbcli-rel &gt;</span> <span class="cmd">show tables</span></span>
+                </div>
+                <div class="doc-item">
+                  <strong>CRUD rápido</strong>
+                  <span><span class="muted">dbcli-rel &gt;</span> <span class="cmd">select * from usuarios</span> | <span class="cmd">insert into usuarios (...) values (...)</span></span>
+                </div>
+                <div class="doc-item">
+                  <strong>Importar un backup</strong>
+                  <span><span class="muted">dbcli-rel &gt;</span> <span class="cmd">import_db</span> <span class="muted">C:/aaa/olimpiadas_upt.sql</span></span>
+                </div>
+                <div class="doc-item">
+                  <strong>Migrar a SQLite o PostgreSQL</strong>
+                  <span><span class="muted">dbcli-rel &gt;</span> <span class="cmd">migrate</span> <span class="muted">C:/aaa/olimpiadas_upt.sql sqlite C:/aaa/olimpiadas_upt.db</span></span>
+                </div>
+                <div class="doc-item">
+                  <strong>Validar backup</strong>
+                  <span><span class="muted">dbcli-rel &gt;</span> <span class="cmd">validate backup</span> <span class="muted">C:/aaa/olimpiadas_upt.sql mysql olimpiadas_upt</span></span>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <div>
+            <details open>
+              <summary>Más funcionalidades</summary>
+              <div class="codebox">
+<span class="muted"># Ejecutar el proyecto</span><br>
+<span class="prompt">cd</span> <span class="cmd">src</span><br>
+<span class="prompt">python</span> <span class="cmd">main.py</span><br><br>
+<span class="muted"># Exportar la base completa</span><br>
+<span class="prompt">dbcli-rel &gt;</span> <span class="cmd">export_db</span> <span class="muted">backup.sql</span><br><br>
+<span class="muted"># Exportar una tabla</span><br>
+<span class="prompt">dbcli-rel &gt;</span> <span class="cmd">export_sql</span> <span class="muted">usuarios usuarios.sql</span><br><br>
+<span class="muted"># Elegir modo</span><br>
+<span class="prompt">[1]</span> <span class="cmd">Relacional</span><br>
+<span class="prompt">[2]</span> <span class="cmd">NoSQL</span><br><br>
+<span class="warn"># Para esta landing</span><br>
+<span class="muted">Ejecuta</span> <span class="cmd">python app.py</span> <span class="muted">desde media/</span>
+              </div>
+
+              <div class="doc-list" style="margin-top:14px;">
+                <div class="doc-item">
+                  <strong>MongoDB</strong>
+                  <span><span class="muted">dbcli-nosql &gt;</span> <span class="cmd">connect mongodb</span> <span class="muted">mi_base localhost 27017</span></span>
+                </div>
+                <div class="doc-item">
+                  <strong>Redis y Cassandra</strong>
+                  <span><span class="muted">dbcli-nosql &gt;</span> <span class="cmd">connect redis</span> <span class="muted">0 localhost 6379</span> | <span class="cmd">connect cassandra</span> <span class="muted">mi_keyspace localhost</span></span>
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="admin-access">
+        <div class="section-header">
+          <div>
+            <h2>Acceso admin</h2>
+            <p>Este acceso abre el panel privado de descargas. Si no tienes la clave, el panel seguirá oculto.</p>
+          </div>
+        </div>
+
+        <div class="admin-entry">
+          <div>
+            <label for="adminKey" style="display:block; margin-bottom:8px; color:var(--muted); font-weight:700;">Clave admin</label>
+            <input id="adminKey" type="password" placeholder="Ingresa la clave para ver el panel" autocomplete="off" />
+          </div>
+          <button class="btn btn-ghost" id="unlockAdminBtn" type="button">Mostrar panel</button>
+        </div>
+
+        <div class="notice">
+          Clave por defecto: <strong>upt-admin</strong>. Si definiste <strong>DBADMIN_ADMIN_KEY</strong> en Render, usa esa.
+        </div>
+      </section>
+
+      <section class="section hidden" id="admin">
+        <div class="section-header">
+          <div>
+            <h2>Panel admin</h2>
+            <p>Registro de descargas con IP, fecha y navegador. Ideal para la demo y para mostrar trazabilidad.</p>
+          </div>
+        </div>
+
+        <div class="notice">
+          Este panel está oculto para visitantes. Solo se muestra cuando la clave es correcta.
+        </div>
+
+        <div class="admin-box">
+          <div class="admin-head">
+            <div>
+              <strong>Historial de descargas</strong>
+              <small id="adminSummary">Cargando datos...</small>
+            </div>
+            <button class="btn btn-secondary" id="refreshAdminBtn" type="button">Actualizar</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>IP</th>
+                  <th>Navegador</th>
+                  <th>Archivo</th>
+                </tr>
+              </thead>
+              <tbody id="downloadsTable">
+                <tr>
+                  <td class="muted" colspan="4">No hay datos cargados todavía.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="footer">DBAdmin CLI | landing local para presentación, descargas y trazabilidad de accesos.</div>
+  </div>
+
+  <a class="floating-top" href="#inicio" title="Volver al inicio">↑</a>
+
+  <script>
+    const statsEls = [document.getElementById('downloadCount'), document.getElementById('downloadCountLarge')];
+    const adminSection = document.getElementById('admin');
+    const adminSummary = document.getElementById('adminSummary');
+    const downloadsTable = document.getElementById('downloadsTable');
+    const refreshAdminBtn = document.getElementById('refreshAdminBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const unlockAdminBtn = document.getElementById('unlockAdminBtn');
+    const adminKeyInput = document.getElementById('adminKey');
+    const ADMIN_STORAGE_KEY = 'dbadmin-admin-key';
+
+    let adminKey = localStorage.getItem(ADMIN_STORAGE_KEY) || '';
+
+    function setCounts(value) {
+      statsEls.forEach((node) => {
+        if (node) {
+          node.textContent = String(value ?? 0);
+        }
+      });
+    }
+
+    async function loadStats() {
+      try {
+        const response = await fetch('/api/stats', { cache: 'no-store' });
+        const data = await response.json();
+        setCounts(data.total_downloads || 0);
+      } catch (error) {
+        setCounts('?');
+      }
+    }
+
+    function renderAdminRows(downloads) {
+      if (!downloads || !downloads.length) {
+        downloadsTable.innerHTML = '<tr><td class="muted" colspan="4">Todavía no hay descargas registradas.</td></tr>';
+        return;
+      }
+
+      downloadsTable.innerHTML = downloads.map((item) => {
+        const ip = item.ip || '-';
+        const userAgent = item.user_agent || '-';
+        const date = item.downloaded_at || '-';
+        const fileName = item.file_name || 'DB-CLI.exe';
+        return `<tr><td>${date}</td><td>${ip}</td><td>${userAgent}</td><td>${fileName}</td></tr>`;
+      }).join('');
+    }
+
+    async function loadAdmin() {
+      try {
+        const url = new URL('/api/admin/downloads', window.location.origin);
+        url.searchParams.set('limit', '100');
+        url.searchParams.set('key', adminKey);
+        const response = await fetch(url, { cache: 'no-store' });
+        if (response.status === 403) {
+          adminSummary.textContent = 'Clave incorrecta. El panel sigue oculto.';
+          downloadsTable.innerHTML = '<tr><td class="muted" colspan="4">Acceso denegado.</td></tr>';
+          adminSection.classList.add('hidden');
+          adminSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
+        const data = await response.json();
+        const total = data.total || 0;
+        const downloads = data.downloads || [];
+        adminSummary.textContent = `${total} descarga(s) registradas en total.`;
+        renderAdminRows(downloads);
+        adminSection.classList.remove('hidden');
+        adminSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (error) {
+        adminSummary.textContent = 'No se pudieron cargar los datos del panel admin.';
+        downloadsTable.innerHTML = '<tr><td class="muted" colspan="4">Error al consultar el historial.</td></tr>';
+      }
+    }
+
+    function unlockAdmin() {
+      adminKey = adminKeyInput.value.trim();
+      localStorage.setItem(ADMIN_STORAGE_KEY, adminKey);
+      loadAdmin();
+    }
+
+    downloadBtn.addEventListener('click', () => {
+      setTimeout(() => {
+        loadStats();
+        loadAdmin();
+      }, 1000);
+    });
+
+    unlockAdminBtn.addEventListener('click', unlockAdmin);
+    adminKeyInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        unlockAdmin();
+      }
+    });
+
+    refreshAdminBtn.addEventListener('click', loadAdmin);
+
+    loadStats();
+    if (adminKey) {
+      adminKeyInput.value = adminKey;
+      loadAdmin();
+    }
+  </script>
+</body>
+</html>
