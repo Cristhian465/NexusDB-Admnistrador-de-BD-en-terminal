@@ -1,0 +1,14 @@
+{
+  "tareas": [
+    {
+      "id": 1,
+      "comando": "select * from clientes",
+      "tipo": "at",
+      "hora": "00:17",
+      "proxima_ejecucion": "2026-06-28T00:17:00",
+      "activa": false,
+      "creada": "2026-06-27T00:16:18.064437"
+    }
+  ],
+  "next_id": 2
+}

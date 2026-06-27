@@ -8,6 +8,12 @@ import os
 import csv
 import shlex
 
+from prompt_toolkit import prompt as pt_prompt
+from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.styles import Style
+
 # Agregar la carpeta actual al path para poder importar
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -32,6 +38,32 @@ from rich.panel import Panel
 from rich.text import Text
 from rich import print as rprint
 
+# ── Módulos de extensión Nexus-DB ──────────────────────────────────────────
+from features.ai_helper import sugerir_sql
+from features.panel_rendimiento import mostrar_panel
+from features.programador_tareas import ProgramadorTareas
+from features.usuarios import GestorUsuarios
+from features.comparador import comparar_bds, revisar_seguridad
+from features.ux_mejoras import (
+    emoji_motor, mostrar_sugerencia, expandir_abreviacion,
+    COMPLETIONS_EXTRA, exito, error as ux_error, advertencia, info, conexion,
+)
+
+
+class _NexusCompleter(Completer):
+    """Proveedor de autocompletado TAB para prompt_toolkit."""
+
+    def __init__(self, repl_instance):
+        self._repl = repl_instance
+
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+        options = self._repl._get_completions(text)
+        for opt in options:
+            if opt.lower().startswith(text.lower()):
+                # Entregar solo la parte que falta por escribir
+                yield Completion(opt[len(text):], start_position=0, display=opt.strip())
+
 
 class REPL:
     """Bucle principal de la aplicación"""
@@ -41,54 +73,226 @@ class REPL:
         self.mode = mode
         self.console = Console()
         self.connector = None
+        self.connector2 = None          # Segundo conector para diff
         self.formatter = TableFormatter()
-        self.last_results = None  # Almacena el resultado del último SELECT
+        self.last_results = None        # Almacena el resultado del último SELECT
+
+        # Módulos de extensión
+        self.gestor_usuarios = GestorUsuarios()
+        self.programador = ProgramadorTareas(repl_execute_fn=self.execute)
+
+        # prompt_toolkit: historial de comandos y autocompletado
+        self._history   = InMemoryHistory()
+        self._completer = _NexusCompleter(self)
+        self._pt_style  = Style.from_dict({"prompt": "bold cyan"})
+        self._pt_kb     = self._build_keybindings()
+
+        self._setup_autocomplete()  # fallback readline (no-op si prompt_toolkit funciona)
 
     def _get_prompt(self):
-        """Genera el prompt dinámicamente según el estado de la conexión"""
-        base = "dbcli-rel" if self.mode == "rel" else "dbcli-nosql"
+        """Genera el prompt dinámicamente según el estado de la conexión."""
+        base = "nexus-db"
+        user_prefix = f"{self.gestor_usuarios.usuario_actual}@" if self.gestor_usuarios.usuario_actual else ""
         if self.connector and self.connector.is_connected:
             db_type = self.connector.get_type().lower()
             db_info = self.connector.get_info()
-            # Extraer solo el nombre del archivo si es path completo
             db_name = os.path.basename(db_info)
-            return f"[{base} | {db_type}: {db_name}] > "
-        return f"{base} > "
+            em = emoji_motor(db_type)
+            return f"[{base} | {user_prefix}{em} {db_type}: {db_name}] > "
+        return f"[{base} | {user_prefix}📂 desconectado] > "
+
+    def _build_keybindings(self):
+        """Define atajos de teclado adicionales para prompt_toolkit."""
+        kb = KeyBindings()
+
+        @kb.add("c-l")          # Ctrl+L → limpiar pantalla
+        def _ctrl_l(event):
+            os.system("cls" if os.name == "nt" else "clear")
+            event.app.renderer.reset()
+            event.app.invalidate()
+
+        return kb
+
+    def _setup_autocomplete(self):
+        """Fallback readline — solo actúa si prompt_toolkit no está disponible."""
+        try:
+            import readline
+            delims = readline.get_completer_delims()
+            readline.set_completer_delims(delims.replace(' ', '').replace('\t', ''))
+            readline.set_completer(self._completer_readline)
+            readline.parse_and_bind("tab: complete")
+        except Exception:
+            pass
+
+    def _completer_readline(self, text, state):
+        """Completer para readline (fallback en sistemas sin prompt_toolkit)."""
+        try:
+            options = self._get_completions(text)
+            matches = [o for o in options if o.lower().startswith(text.lower())]
+            return matches[state] if state < len(matches) else None
+        except Exception:
+            return None
+
+    def _get_completions(self, text: str) -> list:
+        """Obtiene una lista de posibles sugerencias basadas en el texto actual"""
+        # Si no hay texto, sugerir los comandos iniciales del modo correspondiente
+        if not text.strip():
+            base_cmds = COMPLETIONS_EXTRA + ["help", "exit"]
+            if self.mode == 'rel':
+                return [
+                    "connect ", "select ", "insert into ", "update ", "delete from ",
+                    "create table ", "drop table ", "show tables", "status", "disconnect",
+                    "import ", "import_db ", "export ", "export_sql ", "export_db ",
+                    "migrate ", "validate backup ",
+                ] + base_cmds
+            else:
+                return [
+                    "connect ", "find ", "insert ", "update ", "delete ", "set ", "get ",
+                    "del ", "keys ", "show collections", "show keys", "show tables",
+                    "status", "disconnect", "import ", "import_db ", "export ",
+                    "export_sql ", "export_db ", "migrate ", "validate backup ",
+                ] + base_cmds
+
+        text_lower = text.lower()
+
+        # Contexto: connect
+        if text_lower.startswith("connect"):
+            if text_lower.startswith("connect "):
+                engines = ["sqlite ", "postgres ", "mysql "] if self.mode == 'rel' else ["mongodb ", "redis ", "cassandra "]
+                return [f"connect {eng}" for eng in engines]
+            else:
+                return ["connect "]
+
+        # Contexto: validate / validate backup
+        if text_lower.startswith("validate"):
+            if text_lower.startswith("validate "):
+                return ["validate backup "]
+            else:
+                return ["validate backup "]
+
+        # Contexto: Tablas de la base de datos activa
+        tables = []
+        if self.connector and self.connector.is_connected:
+            try:
+                success, tbl_list, _ = self.connector.get_tables()
+                if success:
+                    tables = tbl_list
+            except Exception:
+                pass
+
+        # Sugerir nombres de tablas/colecciones según el comando parcial
+        # Si se detecta "from ", "into ", "update ", "drop table ", "export_sql " en la línea
+        for keyword in ["from ", "into ", "update ", "drop table ", "export_sql "]:
+            if keyword in text_lower:
+                idx = text_lower.rfind(keyword)
+                # Conservar todo el comando hasta la palabra clave
+                prefix = text[:idx + len(keyword)]
+                return [prefix + tbl for tbl in tables]
+
+        # Comandos iniciales filtrados según el modo
+        base_cmds = COMPLETIONS_EXTRA + ["help", "exit"]
+        if self.mode == 'rel':
+            return [
+                "connect ", "select ", "insert into ", "update ", "delete from ",
+                "create table ", "drop table ", "show tables", "status", "disconnect",
+                "import ", "import_db ", "export ", "export_sql ", "export_db ",
+                "migrate ", "validate backup ",
+            ] + base_cmds
+        else:
+            return [
+                "connect ", "find ", "insert ", "update ", "delete ", "set ", "get ",
+                "del ", "keys ", "show collections", "show keys", "show tables",
+                "status", "disconnect", "import ", "import_db ", "export ",
+                "export_sql ", "export_db ", "migrate ", "validate backup ",
+            ] + base_cmds
+
+    def _clear_screen(self):
+        """Limpia la pantalla de la terminal."""
+        os.system('cls' if os.name == 'nt' else 'clear')
 
     def run(self):
-        """Ejecuta el bucle principal"""
+        """Ejecuta el bucle principal usando prompt_toolkit para TAB y historial."""
         while self.running:
             try:
                 current_prompt = self._get_prompt()
-                command = input(current_prompt).strip()
+
+                command = pt_prompt(
+                    current_prompt,
+                    completer=self._completer,
+                    history=self._history,
+                    key_bindings=self._pt_kb,
+                    style=self._pt_style,
+                    complete_while_typing=False,   # solo al presionar TAB
+                ).strip()
+
                 if not command:
                     continue
-                
-                # Try-except global para capturar errores de ejecución sin cerrar la app
+
+                if command.lower() in ('cls', 'clear'):
+                    self._clear_screen()
+                    continue
+
                 try:
                     self.execute(command)
                 except Exception as e:
                     rprint(f"\n[bold red]ERROR de ejecución:[/bold red] [white]{e}[/white]")
                     rprint("[yellow]La aplicación sigue activa. Intenta de nuevo.[/yellow]\n")
-                    
+
             except EOFError:
                 print()
                 break
             except KeyboardInterrupt:
-                rprint("\n[yellow]Usa 'exit' para salir correctamente.[/yellow]")
+                rprint("\n[yellow]Usa 'exit' para salir. Ctrl+L para limpiar pantalla.[/yellow]")
                 continue
 
     def execute(self, command: str):
         """Ejecuta un comando según su tipo"""
+        # Expandir abreviaciones antes de procesar
+        command = expandir_abreviacion(command)
         cmd = command.lower().strip()
 
+        # ── Comandos sin autenticación requerida ───────────────────────────────
         if cmd == "exit":
             self._exit()
+            return
         elif cmd == "help":
             self._help()
-        elif cmd.startswith("validate backup"): # Captura el comando de validación externa
+            return
+
+        # ── Autenticación / usuarios ───────────────────────────────────────────
+        elif cmd.startswith("login") or cmd == "logout" or cmd == "whoami" or cmd.startswith("users"):
+            self._handle_auth(command)
+            return
+
+        # ── Verificar permiso de rol (si hay sesión activa) ───────────────────
+        if not self.gestor_usuarios.tiene_permiso(command):
+            rprint(f"[bold red]❌ Permiso denegado:[/bold red] el rol '[yellow]{self.gestor_usuarios.rol_actual}[/yellow]' "
+                   f"no puede ejecutar '{cmd.split()[0]}'.")
+            return
+
+        # ── Auditar el comando ─────────────────────────────────────────────────
+        self.gestor_usuarios.registrar_comando(command)
+
+        # ── Verificación de seguridad para comandos peligrosos ─────────────────
+        if not revisar_seguridad(command):
+            return
+
+        # ── Nuevos módulos ─────────────────────────────────────────────────────
+        if cmd.startswith("ai"):
+            self._handle_ai(command)
+        elif cmd == "panel":
+            self._handle_panel()
+        elif cmd.startswith("schedule"):
+            self._handle_schedule(command)
+        elif cmd.startswith("diff"):
+            self._handle_diff(command)
+        elif cmd.startswith("connect2"):
+            self._connect2(command)
+
+        # ── Comandos existentes ────────────────────────────────────────────────
+        elif cmd.startswith("validate backup"):
             self._handle_safebridge_validation(command)
-        elif cmd.startswith("migrate"): # Captura el comando de migración ETL de Jimmy
+        elif cmd.startswith("migrate"):
             self._migrate(command)
         elif cmd.startswith("connect"):
             self._connect(command)
@@ -109,6 +313,7 @@ class REPL:
         else:
             if not self.connector or not self.connector.is_connected:
                 rprint("[bold red]ERROR:[/bold red] No hay conexión activa. [yellow]Usa 'connect' primero.[/yellow]")
+                mostrar_sugerencia("connect")
                 return
 
             if self.mode == "rel":
@@ -135,13 +340,251 @@ class REPL:
                 else:
                     self._execute_nosql_query(command)
 
+    # ── Handlers de nuevos módulos ─────────────────────────────────────────────
+
+    def _handle_ai(self, command: str):
+        """Asistente de lenguaje natural → SQL."""
+        # Extraer el texto entre comillas o sin ellas
+        import re as _re
+        m = _re.match(r'^ai\s+"(.+)"$', command.strip(), _re.IGNORECASE)
+        if not m:
+            m = _re.match(r"^ai\s+'(.+)'$", command.strip(), _re.IGNORECASE)
+        if not m:
+            m = _re.match(r'^ai\s+(.+)$', command.strip(), _re.IGNORECASE)
+
+        if not m:
+            rprint("[yellow]Uso: ai \"<texto en español>\"[/yellow]")
+            mostrar_sugerencia("ai")
+            return
+
+        texto = m.group(1).strip()
+        sql = sugerir_sql(texto)
+
+        if not sql:
+            rprint(f"[yellow]💡 No reconozco ese patrón.[/yellow]")
+            mostrar_sugerencia("ai")
+            return
+
+        rprint(f"\n[bold cyan]💡 SQL sugerido:[/bold cyan] [white]{sql}[/white]")
+
+        if not self.connector or not self.connector.is_connected:
+            rprint("[dim]Conéctate a una BD para ejecutar la consulta.[/dim]")
+            return
+
+        try:
+            resp = input("¿Ejecutar? (s/n): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            resp = "n"
+
+        if resp == "s":
+            self.execute(sql)
+
+    def _handle_panel(self):
+        """Muestra el panel de rendimiento del motor activo."""
+        mostrar_panel(self.connector)
+
+    def _handle_schedule(self, command: str):
+        """Gestiona tareas programadas."""
+        parts = command.strip().split(None, 1)
+        if len(parts) < 2:
+            rprint("[yellow]Uso: schedule add <cmd> at HH:MM | schedule add <cmd> every N hours | schedule list | schedule cancel <id>[/yellow]")
+            mostrar_sugerencia("schedule")
+            return
+
+        sub = parts[1].strip()
+
+        if sub == "list":
+            self.programador.listar()
+            return
+
+        if sub.startswith("cancel "):
+            try:
+                tid = int(sub.split()[1])
+            except (IndexError, ValueError):
+                rprint("[red]Uso: schedule cancel <id>[/red]")
+                return
+            if self.programador.cancelar(tid):
+                exito(f"Tarea #{tid} cancelada.")
+            else:
+                rprint(f"[red]No se encontró la tarea #{tid}.[/red]")
+            return
+
+        if sub.startswith("add "):
+            resto = sub[4:].strip()
+
+            # schedule add <cmd> every N hours
+            import re as _re
+            m = _re.search(r'^(.+?)\s+every\s+(\d+)\s+hours?$', resto, _re.IGNORECASE)
+            if m:
+                cmd_t, horas = m.group(1).strip().strip('"'), int(m.group(2))
+                tid = self.programador.agregar_every(cmd_t, horas)
+                exito(f"Tarea #{tid} programada: '{cmd_t}' cada {horas}h.")
+                return
+
+            # schedule add <cmd> at HH:MM
+            m = _re.search(r'^(.+?)\s+at\s+(\d{1,2}:\d{2})$', resto, _re.IGNORECASE)
+            if m:
+                cmd_t, hora = m.group(1).strip().strip('"'), m.group(2)
+                tid = self.programador.agregar_at(cmd_t, hora)
+                exito(f"Tarea #{tid} programada: '{cmd_t}' a las {hora} cada día.")
+                return
+
+            rprint("[red]Formato no reconocido.[/red]")
+            mostrar_sugerencia("schedule")
+            return
+
+        rprint("[red]Subcomando desconocido. Usa: schedule add|list|cancel[/red]")
+
+    def _handle_auth(self, command: str):
+        """Gestiona login, logout, whoami y gestión de usuarios."""
+        parts = command.strip().split()
+        sub = parts[0].lower()
+
+        if sub == "login":
+            if len(parts) < 3:
+                rprint("[yellow]Uso: login <usuario> <contraseña>[/yellow]")
+                return
+            nombre, pwd = parts[1], parts[2]
+            if self.gestor_usuarios.login(nombre, pwd):
+                exito(f"Bienvenido, {nombre} [{self.gestor_usuarios.rol_actual}]")
+            else:
+                rprint("[bold red]Usuario o contraseña incorrectos.[/bold red]")
+
+        elif sub == "logout":
+            self.gestor_usuarios.logout()
+            exito("Sesion cerrada.")
+
+        elif sub == "whoami":
+            self.gestor_usuarios.whoami()
+
+        elif sub == "users":
+            if len(parts) < 2:
+                rprint(
+                    "[yellow]Subcomandos: users list | users add <nombre> <pass> <rol> | "
+                    "users delete <nombre> | users passwd <nombre> <nueva_pass>[/yellow]"
+                )
+                return
+            accion = parts[1].lower()
+
+            if accion == "list":
+                self.gestor_usuarios.listar_usuarios()
+
+            elif accion == "add":
+                if len(parts) < 5:
+                    rprint("[yellow]Uso: users add <nombre> <contraseña> <rol>[/yellow]")
+                    rprint("[dim]Roles disponibles: admin, developer, viewer[/dim]")
+                    return
+                nombre, pwd, rol = parts[2], parts[3], parts[4].lower()
+                if self.gestor_usuarios.agregar_usuario(nombre, pwd, rol):
+                    exito(f"Usuario '{nombre}' creado con rol '{rol}'.")
+
+            elif accion == "delete":
+                if len(parts) < 3:
+                    rprint("[yellow]Uso: users delete <nombre>[/yellow]")
+                    return
+                nombre = parts[2]
+                try:
+                    conf = input(f"Eliminar usuario '{nombre}'? (s/n): ").strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    conf = "n"
+                if conf == "s" and self.gestor_usuarios.eliminar_usuario(nombre):
+                    exito(f"Usuario '{nombre}' eliminado.")
+
+            elif accion == "passwd":
+                if len(parts) < 4:
+                    rprint("[yellow]Uso: users passwd <nombre> <nueva_contraseña>[/yellow]")
+                    return
+                nombre, nueva = parts[2], parts[3]
+                if self.gestor_usuarios.cambiar_password(nombre, nueva):
+                    exito(f"Contraseña de '{nombre}' actualizada.")
+
+            else:
+                rprint(f"[red]Subcomando desconocido: '{accion}'. Usa: list, add, delete, passwd[/red]")
+
+    def _handle_diff(self, command: str):
+        """
+        Compara las tablas de dos bases de datos.
+
+        Formas de uso:
+          diff                              — compara connector actual vs connector2 (si existe)
+          diff <archivo.db>                 — compara actual vs otro SQLite
+          diff <archivo.db> <archivo2.db>   — compara dos SQLite entre sí
+          diff connect                      — muestra cómo configurar un segundo conector
+        """
+        if not self.connector or not self.connector.is_connected:
+            rprint("[red]Primero conéctate a una base de datos con 'connect'.[/red]")
+            return
+
+        parts = command.strip().split()
+        args  = parts[1:]  # todo después de "diff"
+
+        # ── sin argumentos: usar connector2 si existe ─────────────────────────
+        if not args:
+            if self.connector2 and self.connector2.is_connected:
+                comparar_bds(self.connector, self.connector2)
+            else:
+                rprint(
+                    "[yellow]Uso del comando diff:[/yellow]\n\n"
+                    "  [cyan]diff <archivo.db>[/cyan]\n"
+                    "    Compara la BD actual con otro archivo SQLite.\n"
+                    "    Ej: [white]diff otra_bd.db[/white]\n\n"
+                    "  [cyan]diff <archivo1.db> <archivo2.db>[/cyan]\n"
+                    "    Compara dos archivos SQLite entre sí.\n"
+                    "    Ej: [white]diff produccion.db staging.db[/white]\n\n"
+                    "  [cyan]connect2 sqlite <archivo.db>[/cyan]\n"
+                    "    Conecta un segundo conector y luego escribe [white]diff[/white] para comparar."
+                )
+            return
+
+        # ── helper: crear conector SQLite rápido ─────────────────────────────
+        def _sqlite(path: str):
+            from connectors.sqlite_connector import SQLiteConnector
+            c = SQLiteConnector()
+            c.connect(db_path=path)
+            return c
+
+        try:
+            if len(args) == 1:
+                # diff <archivo2.db>  →  actual vs archivo2
+                c2 = _sqlite(args[0])
+                comparar_bds(self.connector, c2)
+
+            elif len(args) == 2:
+                # diff <archivo1.db> <archivo2.db>  →  ambos SQLite
+                c1 = _sqlite(args[0])
+                c2 = _sqlite(args[1])
+                comparar_bds(c1, c2)
+
+            else:
+                rprint("[red]Demasiados argumentos. Usa: diff [archivo1.db] [archivo2.db][/red]")
+
+        except Exception as e:
+            rprint(f"[red]Error al comparar: {e}[/red]")
+
+    def _connect2(self, command: str):
+        """Conecta un segundo conector SQLite para usar con 'diff'."""
+        parts = command.split()
+        if len(parts) < 3 or parts[1].lower() != "sqlite":
+            rprint("[yellow]Uso: connect2 sqlite <archivo.db>[/yellow]")
+            return
+        db_path = parts[2]
+        try:
+            from connectors.sqlite_connector import SQLiteConnector
+            self.connector2 = SQLiteConnector()
+            self.connector2.connect(db_path=db_path)
+            exito(f"Segundo conector listo: SQLite '{db_path}'")
+        except Exception as e:
+            rprint(f"[red]Error: {e}[/red]")
+            self.connector2 = None
+
     # ==================== COMANDOS BÁSICOS ====================
 
     def _exit(self):
         """Salir de la aplicación"""
         if self.connector and self.connector.is_connected:
             self._disconnect()
-        rprint("\n[bold green]Hasta luego[/bold green]")
+        self.programador.detener()
+        rprint("\n[bold cyan]👋 Hasta luego — Nexus-DB[/bold cyan]")
         self.running = False
 
     def _help(self):
@@ -194,9 +637,31 @@ class REPL:
         help_text.append("  export <archivo.csv>                        - Exportar últimos resultados a CSV\n")
         help_text.append("  export_sql <tabla> <archivo.sql>            - Exportar tabla/colección a script\n")
         help_text.append("  export_db <archivo.sql>                     - Exportar BD completa (esquema y datos)\n")
-        help_text.append("  migrate <origen> <destino> <salida> [--sim] - Migrar base de datos por ETL (Jimmy)\n")
-        help_text.append("  validate backup <ruta> <motor> <db_name>    - Validar integridad de backup en Docker (Iker)\n")
-        help_text.append("  help                                        - Muestra esta ayuda\n")
+        help_text.append("  migrate <origen> <destino> <salida> [--sim] - Migrar base de datos por ETL\n")
+        help_text.append("  validate backup <ruta> <motor> <db_name>    - Validar integridad de backup en Docker\n")
+
+        help_text.append("\nNEXUS-DB EXTENSIONS:\n", style="bold green")
+        help_text.append('  ai "<texto>"                                - Convierte español a SQL y lo ejecuta\n')
+        help_text.append("  panel                                       - Panel de consultas activas / lentas\n")
+        help_text.append("  schedule add <cmd> at HH:MM                 - Programar tarea diaria\n")
+        help_text.append("  schedule add <cmd> every N hours            - Programar tarea periódica\n")
+        help_text.append("  schedule list                               - Listar tareas programadas\n")
+        help_text.append("  schedule cancel <id>                        - Cancelar tarea\n")
+        help_text.append("  diff [archivo2.db]                          - Comparar tablas: actual vs otro SQLite\n")
+        help_text.append("  diff <archivo1.db> <archivo2.db>            - Comparar dos archivos SQLite\n")
+        help_text.append("  connect2 sqlite <archivo.db>                - Conectar 2do conector para diff\n")
+
+        help_text.append("\nUSUARIOS:\n", style="bold magenta")
+        help_text.append("  login <usuario> <contraseña>                - Iniciar sesión\n")
+        help_text.append("  logout                                      - Cerrar sesión\n")
+        help_text.append("  whoami                                      - Ver usuario y rol actuales\n")
+        help_text.append("  users list                                  - Listar usuarios (admin)\n")
+        help_text.append("  users add <nombre> <pass> <rol>             - Crear usuario (admin)\n")
+        help_text.append("  users delete <nombre>                       - Eliminar usuario (admin)\n")
+        help_text.append("  users passwd <nombre> <nueva_pass>          - Cambiar contraseña\n")
+        help_text.append("  cls / clear                                 - Limpiar pantalla\n")
+
+        help_text.append("\n  help                                        - Muestra esta ayuda\n")
         help_text.append("  exit                                        - Salir de la aplicación\n")
 
         self.console.print(Panel(help_text, title="[bold white]COMANDOS DISPONIBLES[/bold white]", border_style="blue"))

@@ -1,0 +1,59 @@
+[2026-06-26 23:16:46] anon | CMD: status
+[2026-06-26 23:16:53] anon | CMD: clear
+[2026-06-26 23:55:30] anon | CMD: conne
+[2026-06-26 23:56:05] anon | CMD: connect mysql test_db root Upt2026 147.93.7.122:3308
+[2026-06-26 23:56:47] anon | CMD: connect mysql test_db root Upt2026 147.93.7.122:3308
+[2026-06-26 23:57:02] anon | CMD: connect postgres test_db test_user Upt2026 147.93.7.122:5432
+[2026-06-26 23:57:09] anon | CMD: connect mongodb test_db 147.93.7.122 27017
+[2026-06-26 23:57:57] anon | CMD: docker exec mongodb_test mongosh -u admin -p Upt2026 --authenticationDatabase admin test_db --eval "db.categorias.find(); db.productos_mongo.find();"
+[2026-06-26 23:59:27] anon | CMD: show tables
+[2026-06-26 23:59:31] anon | CMD: status
+[2026-06-26 23:59:36] anon | CMD: disconnect
+[2026-06-27 00:00:24] anon | CMD: connect mysql test_db root Upt2026 147.93.7.122 3308
+[2026-06-27 00:00:34] anon | CMD: show tables
+[2026-06-27 00:01:03] anon | CMD: select * from clientes
+[2026-06-27 00:01:22] anon | CMD: disconect
+[2026-06-27 00:01:32] anon | CMD: disconnect
+[2026-06-27 00:01:42] anon | CMD: connect postgres test_db test_user Upt2026 147.93.7.122 5432
+[2026-06-27 00:01:50] anon | CMD: show tables
+[2026-06-27 00:02:01] anon | CMD: select * from ventas
+[2026-06-27 00:02:08] anon | CMD: disonnect
+[2026-06-27 00:02:22] anon | CMD: disconnect
+[2026-06-27 00:03:06] anon | CMD: connect mongodb test_db localhost 27017 admin Upt2026
+[2026-06-27 00:03:17] anon | CMD: connect mongodb test_db localhost 27017 admin Upt2026
+[2026-06-27 00:03:21] anon | CMD: show tables
+[2026-06-27 00:05:45] anon | CMD: connect mysql test_db root Upt2026 147.93.7.122 3308
+[2026-06-27 00:06:37] anon | LOGIN fallido para 'dayan'
+[2026-06-27 00:07:44] anon | LOGOUT
+[2026-06-27 00:07:50] anon | LOGIN fallido para 'dayan'
+[2026-06-27 00:08:16] anon | CMD: ai from
+[2026-06-27 00:08:28] anon | CMD: ai mostrar usuarios
+[2026-06-27 00:08:36] anon | CMD: ai muestra usuarios
+[2026-06-27 00:10:44] anon | CMD: panel
+[2026-06-27 00:12:12] anon | CMD: show	tables
+[2026-06-27 00:12:30] anon | CMD: show tables
+[2026-06-27 00:13:00] anon | CMD: diff clientes:pedidos
+[2026-06-27 00:14:21] anon | CMD: diff mysql:clientes mysql:pedidos
+[2026-06-27 00:16:18] anon | CMD: schedule add select * from clientes at 00:17
+[2026-06-27 00:16:35] anon | CMD: schedule list
+[2026-06-27 00:17:01] anon | CMD: select * from clientes
+[2026-06-27 00:17:15] anon | CMD: schedule list
+[2026-06-27 00:17:28] anon | CMD: diff cancel 1
+[2026-06-27 00:17:44] anon | CMD: schedule cancel 1
+[2026-06-27 00:20:54] anon | CMD: disconnect
+[2026-06-27 00:21:14] anon | CMD: connect mysql test_db root Upt2026 147.93.7.122 3308
+[2026-06-27 00:23:39] anon | CMD: sh
+[2026-06-27 00:27:39] anon | CMD: connect mysql test_db root Upt2026 localhost 3308
+[2026-06-27 00:28:04] anon | CMD: connect mysql test_db root Upt2026 localhost 3308
+[2026-06-27 00:28:18] anon | CMD: connect postgres test_db test_user Upt2026 localhost 5432
+[2026-06-27 00:29:07] anon | CMD: connect mysql test_db root Upt2026 localhost 3308
+[2026-06-27 00:29:27] anon | CMD: connect postgres test_db test_user Upt2026 localhost 5432
+[2026-06-27 00:30:36] anon | CMD: connect postgres test_db test_user Upt2026 localhost 5432
+[2026-06-27 00:31:27] anon | CMD: connect postgres test_db test_user Upt2026 localhost 5432
+[2026-06-27 00:32:14] anon | CMD: disconnect
+[2026-06-27 00:33:04] anon | CMD: connect mongodb test_db 147.93.7.122 27017 admin Upt2026
+[2026-06-27 00:33:18] anon | CMD: disconnect
+[2026-06-27 00:33:45] anon | CMD: connect mysql test_db root Upt2026 localhost 3308
+[2026-06-27 00:39:36] anon | CMD: connect mysql test_db root Upt2026 localhost 3308
+[2026-06-27 00:40:30] anon | CMD: connect mysql test_db root Upt2026 147.93.7.122 3308
+[2026-06-27 00:40:44] anon | CMD: show tables

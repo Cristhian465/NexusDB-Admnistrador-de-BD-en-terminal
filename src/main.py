@@ -33,7 +33,7 @@ def main():
         import sys
         
         # Set Window Title
-        ctypes.windll.kernel32.SetConsoleTitleW("Database Administrator CLI")
+        ctypes.windll.kernel32.SetConsoleTitleW("Nexus-DB — Asistente Universal de Bases de Datos")
         
         # Set Window Icon
         hwnd = ctypes.windll.kernel32.GetConsoleWindow()
@@ -50,17 +50,23 @@ def main():
     console = Console()
     try:
         logo = r"""
-  ____  ____     ____ _     ___ 
- |  _ \| __ )   / ___| |   |_ _|
- | | | |  _ \  | |   | |    | | 
- | |_| | |_) | | |___| |___ | | 
- |____/|____/   \____|_____|___|
+  _   _                         ____  ____
+ | \ | | _____  ___   _ ___   |  _ \| __ )
+ |  \| |/ _ \ \/ / | | / __|  | | | |  _ \
+ | |\  |  __/>  <| |_| \__ \  | |_| | |_) |
+ |_| \_|\___/_/\_\\__,_|___/  |____/|____/
         """
+        tagline = Text()
+        tagline.append(logo, style="bold cyan")
+        tagline.append("\n  Asistente Universal de Bases de Datos", style="bold white")
+        tagline.append("  •  SQL & NoSQL  •  ETL  •  AI  •  Docker\n", style="dim")
+
         console.print(Panel(
-            Text(logo, style="bold cyan"),
-            title="[bold white]Database Administrator CLI[/bold white]",
-            subtitle="[yellow]v1.1 - Presentation Ready[/yellow]",
-            expand=False
+            tagline,
+            title="[bold cyan]⚡ Nexus-DB[/bold cyan]",
+            subtitle="[yellow]v2.0 — nexus-db.cli[/yellow]",
+            border_style="cyan",
+            expand=False,
         ))
 
         menu_text = Text()
