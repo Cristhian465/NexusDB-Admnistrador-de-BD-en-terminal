@@ -57,3 +57,20 @@
 [2026-06-27 00:39:36] anon | CMD: connect mysql test_db root Upt2026 localhost 3308
 [2026-06-27 00:40:30] anon | CMD: connect mysql test_db root Upt2026 147.93.7.122 3308
 [2026-06-27 00:40:44] anon | CMD: show tables
+[2026-06-28 14:37:37] anon | CMD: connect sqlite C:\Users\USUARIO\AppData\Local\Temp\nexus_test.db
+[2026-06-28 14:37:52] anon | CMD: connect sqlite C:\Users\USUARIO\AppData\Local\Temp\nexus_test.db
+[2026-06-28 14:37:52] anon | CMD: SELECT * FROM usuarios
+[2026-06-28 14:37:52] anon | CMD: SELECT COUNT(*) FROM usuarios
+[2026-06-28 14:46:42] anon | CMD: voice
+[2026-06-28 14:48:18] anon | CMD: connect mysql test_db root Upt2026 147.93.7.122 3308
+[2026-06-28 14:48:31] anon | CMD: voice
+[2026-06-28 14:48:40] anon | CMD: exist
+[2026-06-28 14:50:22] anon | CMD: connect sqlite prueba.db
+[2026-06-28 14:50:34] anon | CMD: create table usuarios (id integer primary key, nombre text, edad int)
+[2026-06-28 14:50:43] anon | CMD: insert into usuarios (nombre, edad) values ('Ana', 30)
+[2026-06-28 14:50:47] anon | CMD: insert into usuarios (nombre, edad) values ('Beto', 25)
+[2026-06-28 14:51:28] anon | CMD: SELECT * FROM usuarios
+[2026-06-28 14:54:04] anon | CMD: SELECT * FROM usuarios
+[2026-06-28 14:54:51] anon | CMD: ai_helper
+[2026-06-28 15:04:37] anon | CMD: connect sqlite C:\Users\USUARIO\AppData\Local\Temp\nexus_cerebro.db
+[2026-06-28 15:13:01] anon | CMD: connect sqlite C:\Users\USUARIO\AppData\Local\Temp\nexus_live.db

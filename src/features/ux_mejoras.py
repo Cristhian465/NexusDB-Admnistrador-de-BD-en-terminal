@@ -113,6 +113,9 @@ def mostrar_sugerencia(cmd: str):
 # ── Completions adicionales para el autocompletado del REPL ──────────────────
 
 COMPLETIONS_EXTRA = [
+    "voice",
+    "voice once",
+    "voice test ",
     "ai ",
     "panel",
     "schedule add ",

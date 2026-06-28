@@ -48,6 +48,8 @@ from features.ux_mejoras import (
     emoji_motor, mostrar_sugerencia, expandir_abreviacion,
     COMPLETIONS_EXTRA, exito, error as ux_error, advertencia, info, conexion,
 )
+from features.asistente_voz import resumir_resultado, es_palabra_salir
+from features.cerebro_sql import generar_sql, disponible as ia_disponible
 
 
 class _NexusCompleter(Completer):
@@ -80,6 +82,7 @@ class REPL:
         # Módulos de extensión
         self.gestor_usuarios = GestorUsuarios()
         self.programador = ProgramadorTareas(repl_execute_fn=self.execute)
+        self.voz = None                  # NexusVoice (carga perezosa)
 
         # prompt_toolkit: historial de comandos y autocompletado
         self._history   = InMemoryHistory()
@@ -259,6 +262,20 @@ class REPL:
             self._help()
             return
 
+        # ── Control por voz (NexusVoice) ───────────────────────────────────────
+        elif cmd in ("voz", "voice", "voz on", "voice on"):
+            self._handle_voice_loop()
+            return
+        elif cmd in ("voz once", "voice once"):
+            self._handle_voice_once()
+            return
+        elif cmd.startswith("voz engine") or cmd.startswith("voice engine"):
+            self._handle_voice_engine(command)
+            return
+        elif cmd.startswith("voz test") or cmd.startswith("voice test"):
+            self._handle_voice_test(command)
+            return
+
         # ── Autenticación / usuarios ───────────────────────────────────────────
         elif cmd.startswith("login") or cmd == "logout" or cmd == "whoami" or cmd.startswith("users"):
             self._handle_auth(command)
@@ -358,14 +375,15 @@ class REPL:
             return
 
         texto = m.group(1).strip()
-        sql = sugerir_sql(texto)
+        sql, fuente = generar_sql(texto, self.connector, self.mode)
 
         if not sql:
-            rprint(f"[yellow]💡 No reconozco ese patrón.[/yellow]")
+            rprint(f"[yellow]💡 No pude generar SQL para esa petición.[/yellow]")
             mostrar_sugerencia("ai")
             return
 
-        rprint(f"\n[bold cyan]💡 SQL sugerido:[/bold cyan] [white]{sql}[/white]")
+        etiqueta = "🧠 IA (Claude)" if fuente == "ia" else "🔤 patrón"
+        rprint(f"\n[bold cyan]💡 SQL sugerido ({etiqueta}):[/bold cyan] [white]{sql}[/white]")
 
         if not self.connector or not self.connector.is_connected:
             rprint("[dim]Conéctate a una BD para ejecutar la consulta.[/dim]")
@@ -577,6 +595,163 @@ class REPL:
             rprint(f"[red]Error: {e}[/red]")
             self.connector2 = None
 
+    # ── Control por voz (NexusVoice) ───────────────────────────────────────────
+
+    def _get_voz(self):
+        """Inicializa el asistente de voz la primera vez que se usa."""
+        if self.voz is None:
+            from features.asistente_voz import AsistenteVoz
+            self.voz = AsistenteVoz()
+        return self.voz
+
+    def _voz_no_disponible(self, voz):
+        """Muestra ayuda si las dependencias de voz no están instaladas."""
+        ux_error("El control por voz no está disponible.")
+        rprint(f"[dim]Detalle: {voz.error_init or 'dependencias ausentes'}[/dim]")
+        rprint("[yellow]Instala las dependencias con:[/yellow]")
+        rprint("  [white]pip install SpeechRecognition pyttsx3 pyaudio[/white]")
+
+    def _procesar_voz(self, texto: str):
+        """Traduce el texto reconocido a un comando y lo ejecuta, narrando el
+        resultado en voz alta. Reutiliza ai_helper + el executor existentes."""
+        voz = self._get_voz()
+        cmd = expandir_abreviacion(texto).strip()
+        low = cmd.lower()
+
+        # Palabras clave que indican que ya es un comando directo (no lenguaje natural)
+        directos = (
+            "select", "insert", "update", "delete", "create", "drop", "show",
+            "connect", "status", "disconnect", "find", "get ", "set ", "keys",
+            "del ", "import", "export", "migrate", "panel", "help", "diff",
+        )
+        es_directo = any(low.startswith(k) for k in directos)
+
+        if not es_directo:
+            sql, fuente = generar_sql(cmd, self.connector, self.mode)
+            if not sql:
+                rprint("[yellow]💬 No reconocí ese comando por voz.[/yellow]")
+                voz.hablar("No reconocí ese comando. ¿Puedes repetirlo?")
+                return
+            etiqueta = "🧠 IA" if fuente == "ia" else "🔤 patrón"
+            rprint(f"[bold cyan]{etiqueta} → SQL generado:[/bold cyan] [white]{sql}[/white]")
+            cmd = sql
+
+        # Ejecutar y narrar el resultado
+        prev = self.last_results
+        try:
+            self.execute(cmd)
+        except Exception as e:
+            rprint(f"[bold red]ERROR:[/bold red] {e}")
+            voz.hablar("Ocurrió un error al ejecutar el comando.")
+            return
+
+        if self.last_results is not None and self.last_results is not prev:
+            voz.hablar(resumir_resultado(self.last_results))
+        else:
+            voz.hablar("Listo.")
+
+    def _handle_voice_once(self):
+        """Captura un único comando por voz, lo ejecuta y vuelve al modo texto."""
+        voz = self._get_voz()
+        if not voz.disponible:
+            self._voz_no_disponible(voz)
+            return
+
+        rprint("[bold magenta]🎙️  Escuchando... (habla ahora)[/bold magenta]")
+        texto, err = voz.escuchar()
+        if err:
+            advertencia(err)
+            return
+        rprint(f"[bold green]👤 Escuché:[/bold green] [white]\"{texto}\"[/white]")
+        self._procesar_voz(texto)
+
+    def _handle_voice_test(self, command: str):
+        """Simula el pipeline de voz SIN micrófono (respaldo para la demo).
+        Uso: voice test <frase en español>"""
+        # Quitar el prefijo 'voz test' / 'voice test'
+        resto = command.strip()
+        for pref in ("voice test", "voz test"):
+            if resto.lower().startswith(pref):
+                resto = resto[len(pref):].strip().strip('"').strip("'")
+                break
+        if not resto:
+            rprint("[yellow]Uso: voice test <frase>[/yellow] — ej: voice test muestra usuarios")
+            return
+        rprint(f"[bold green]👤 (simulado):[/bold green] [white]\"{resto}\"[/white]")
+        self._procesar_voz(resto)
+
+    def _handle_voice_engine(self, command: str):
+        """Cambia o muestra el motor de transcripción de voz.
+        Uso: voice engine [auto|google|vosk]"""
+        voz = self._get_voz()
+        parts = command.strip().split()
+        if len(parts) < 3:
+            estado_vosk = "disponible" if voz.vosk_disponible() else "no instalado"
+            rprint(
+                f"[cyan]Motor de voz actual:[/cyan] [white]{voz.motor}[/white]\n"
+                f"[dim]Offline (Vosk): {estado_vosk}[/dim]\n"
+                "[yellow]Uso: voice engine auto|google|vosk[/yellow]\n"
+                "  [white]auto[/white]   = Google online, con respaldo offline si no hay internet\n"
+                "  [white]google[/white] = solo online (mejor precisión)\n"
+                "  [white]vosk[/white]   = solo offline (sin internet)"
+            )
+            return
+        motor = parts[2].lower()
+        if motor in ("vosk", "auto") and not voz.vosk_disponible():
+            advertencia("El modelo de voz offline (Vosk) no está instalado.")
+            rprint("[dim]Instálalo con: pip install vosk  y descarga un modelo en español.[/dim]")
+        if voz.set_motor(motor):
+            exito(f"Motor de voz cambiado a '{motor}'.")
+        else:
+            rprint("[red]Motor no válido. Usa: auto, google o vosk.[/red]")
+
+    def _handle_voice_loop(self):
+        """Modo voz continuo: escucha, ejecuta y responde hasta oír 'salir'."""
+        voz = self._get_voz()
+        if not voz.disponible:
+            self._voz_no_disponible(voz)
+            return
+
+        banner = Text()
+        banner.append("🎙️  MODO VOZ ACTIVADO\n", style="bold magenta")
+        banner.append("Habla un comando en español tras el aviso.\n", style="white")
+        banner.append("Di ", style="dim")
+        banner.append("'salir'", style="bold yellow")
+        banner.append(" o ", style="dim")
+        banner.append("Ctrl+C", style="bold yellow")
+        banner.append(" para volver al modo texto.", style="dim")
+        self.console.print(Panel(banner, border_style="magenta", expand=False))
+        voz.hablar("Modo voz activado. Te escucho.")
+
+        fallos = 0
+        while True:
+            try:
+                rprint("\n[bold magenta]🎙️  Escuchando...[/bold magenta]")
+                texto, err = voz.escuchar()
+
+                if err:
+                    advertencia(err)
+                    fallos += 1
+                    if fallos >= 4:
+                        rprint("[yellow]Demasiados intentos fallidos. Saliendo del modo voz.[/yellow]")
+                        voz.hablar("Saliendo del modo voz.")
+                        break
+                    continue
+
+                fallos = 0
+                rprint(f"[bold green]👤 Escuché:[/bold green] [white]\"{texto}\"[/white]")
+
+                if es_palabra_salir(texto):
+                    voz.hablar("Saliendo del modo voz. Hasta luego.")
+                    rprint("[bold magenta]🎙️  Modo voz desactivado.[/bold magenta]")
+                    break
+
+                self._procesar_voz(texto)
+
+            except KeyboardInterrupt:
+                rprint("\n[bold magenta]🎙️  Modo voz desactivado.[/bold magenta]")
+                break
+
     # ==================== COMANDOS BÁSICOS ====================
 
     def _exit(self):
@@ -640,8 +815,14 @@ class REPL:
         help_text.append("  migrate <origen> <destino> <salida> [--sim] - Migrar base de datos por ETL\n")
         help_text.append("  validate backup <ruta> <motor> <db_name>    - Validar integridad de backup en Docker\n")
 
+        help_text.append("\n🎙️  CONTROL POR VOZ (NexusVoice):\n", style="bold magenta")
+        help_text.append("  voice                                       - Modo voz continuo (habla tus comandos)\n")
+        help_text.append("  voice once                                  - Captura un solo comando por voz\n")
+        help_text.append("  voice test <frase>                          - Prueba el pipeline de voz sin micrófono\n")
+        help_text.append("  voice engine auto|google|vosk               - Motor de voz (vosk = offline, sin internet)\n")
+
         help_text.append("\nNEXUS-DB EXTENSIONS:\n", style="bold green")
-        help_text.append('  ai "<texto>"                                - Convierte español a SQL y lo ejecuta\n')
+        help_text.append('  ai "<texto>"                                - Convierte español a SQL con IA (Claude) y lo ejecuta\n')
         help_text.append("  panel                                       - Panel de consultas activas / lentas\n")
         help_text.append("  schedule add <cmd> at HH:MM                 - Programar tarea diaria\n")
         help_text.append("  schedule add <cmd> every N hours            - Programar tarea periódica\n")

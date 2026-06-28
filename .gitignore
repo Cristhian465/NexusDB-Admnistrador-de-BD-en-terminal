@@ -1,0 +1,13 @@
+# Entorno virtual
+.venv/
+
+# Caché de Python
+__pycache__/
+*.pyc
+
+# Modelo de voz offline Vosk (asset grande ~40MB; se descarga aparte)
+src/models/vosk-es/
+src/models/
+
+# Claves / configuración local
+.env

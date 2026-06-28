@@ -9,3 +9,11 @@ requests>=2.31.0
 pandas>=2.1.0
 sqlalchemy>=2.0.0
 openpyxl>=3.1.0
+# 🎙️ NexusVoice — control por voz (voz→texto y texto→voz)
+SpeechRecognition>=3.10.0
+pyttsx3>=2.90
+pyaudio>=0.2.13
+vosk>=0.3.45            # reconocimiento de voz OFFLINE (respaldo sin internet)
+# 🧠 Cerebro IA — traducción de lenguaje natural a SQL (OpenAI o Claude)
+openai>=1.40.0
+anthropic>=0.40.0
