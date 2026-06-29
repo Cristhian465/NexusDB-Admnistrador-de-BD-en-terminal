@@ -74,3 +74,37 @@
 [2026-06-28 14:54:51] anon | CMD: ai_helper
 [2026-06-28 15:04:37] anon | CMD: connect sqlite C:\Users\USUARIO\AppData\Local\Temp\nexus_cerebro.db
 [2026-06-28 15:13:01] anon | CMD: connect sqlite C:\Users\USUARIO\AppData\Local\Temp\nexus_live.db
+[2026-06-28 16:42:04] anon | CMD: show tables
+[2026-06-28 16:44:09] anon | CMD: connect sqlite prueba.db
+[2026-06-28 16:44:26] anon | CMD: begin
+[2026-06-28 16:44:38] anon | CMD: insert into usuarios values (3, 'Juan', 'juan@mail.com')
+[2026-06-28 16:44:45] anon | CMD: select * from usuarios
+[2026-06-28 16:44:57] anon | CMD: rollback
+[2026-06-28 16:45:06] anon | CMD: select * from usuarios
+[2026-06-28 16:45:42] anon | CMD: rollback
+[2026-06-28 19:10:26] anon | CMD: connect sqlite prueba.db
+[2026-06-28 19:10:30] anon | CMD: select * from usuarios
+[2026-06-28 19:10:41] anon | CMD: insert into usuarios values (4, 'Juan', 'juan@mail.com')
+[2026-06-28 19:10:46] anon | CMD: rollback
+[2026-06-28 19:13:45] anon | CMD: select * from usuarios
+[2026-06-28 19:13:52] anon | CMD: begin
+[2026-06-28 19:14:51] anon | CMD: insert into usuarios values (5, 'Juan', 'juan@mail.com')
+[2026-06-28 19:14:55] anon | CMD: rollback
+[2026-06-28 19:15:21] anon | CMD: select * from usuarios
+[2026-06-28 19:17:01] anon | CMD: select * from usuarios where nombre
+[2026-06-28 19:17:08] anon | CMD: select * from usuarios where id
+[2026-06-28 19:17:22] anon | CMD: select * from usuarios where edad
+[2026-06-28 19:17:35] anon | CMD: select * from usuarios where nombre
+[2026-06-28 19:17:53] anon | CMD: search "Carlos"
+[2026-06-28 19:18:05] anon | CMD: search "Ana"
+[2026-06-28 19:18:56] anon | CMD: bookmark save mis_ventas "select u.nombre, v.total from usuarios u join ventas v on u.id = v.usuario_id"
+[2026-06-28 19:19:04] anon | CMD: bookmark list
+[2026-06-28 19:19:10] anon | CMD: mis_ventas
+[2026-06-28 19:20:17] anon | CMD: bookmark run mis_ventas
+[2026-06-28 19:20:17] anon | CMD: select u.nombre, v.total from usuarios u join ventas v on u.id = v.usuario_id
+[2026-06-28 19:21:08] anon | CMD: bookmark save edad "select * from usuarios where edad"
+[2026-06-28 19:21:16] anon | CMD: bookmark run edad
+[2026-06-28 19:21:16] anon | CMD: select * from usuarios where edad
+[2026-06-28 19:21:41] anon | CMD: generate_erd
+[2026-06-28 19:23:31] anon | CMD: panel
+[2026-06-28 19:24:03] anon | CMD: bookmark list

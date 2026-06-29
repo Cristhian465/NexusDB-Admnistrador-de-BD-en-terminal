@@ -10,7 +10,7 @@ import shlex
 
 from prompt_toolkit import prompt as pt_prompt
 from prompt_toolkit.completion import Completer, Completion
-from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
 
@@ -50,7 +50,8 @@ from features.ux_mejoras import (
 )
 from features.asistente_voz import resumir_resultado, es_palabra_salir
 from features.cerebro_sql import generar_sql, disponible as ia_disponible
-
+from features.bookmarks import BookmarkManager
+from features.erd_generator import generar_diagrama
 
 class _NexusCompleter(Completer):
     """Proveedor de autocompletado TAB para prompt_toolkit."""
@@ -59,12 +60,17 @@ class _NexusCompleter(Completer):
         self._repl = repl_instance
 
     def get_completions(self, document, complete_event):
-        text = document.text_before_cursor
-        options = self._repl._get_completions(text)
-        for opt in options:
-            if opt.lower().startswith(text.lower()):
-                # Entregar solo la parte que falta por escribir
-                yield Completion(opt[len(text):], start_position=0, display=opt.strip())
+        import re
+        # Extraer la última palabra escrita (puede contener _, -, etc)
+        word_before_cursor = document.get_word_before_cursor(pattern=re.compile(r'[\w\-]+'))
+        if not word_before_cursor:
+            return
+            
+        options = self._repl._get_completions(document.text_before_cursor)
+        # Usar un set para evitar duplicados
+        for opt in sorted(set(options)):
+            if opt.lower().startswith(word_before_cursor.lower()):
+                yield Completion(opt, start_position=-len(word_before_cursor))
 
 
 class REPL:
@@ -78,14 +84,18 @@ class REPL:
         self.connector2 = None          # Segundo conector para diff
         self.formatter = TableFormatter()
         self.last_results = None        # Almacena el resultado del último SELECT
+        self.in_transaction = False
+        self._schema_cache = {}
 
         # Módulos de extensión
         self.gestor_usuarios = GestorUsuarios()
         self.programador = ProgramadorTareas(repl_execute_fn=self.execute)
         self.voz = None                  # NexusVoice (carga perezosa)
+        self.bookmark_mgr = BookmarkManager()
 
         # prompt_toolkit: historial de comandos y autocompletado
-        self._history   = InMemoryHistory()
+        history_path = os.path.expanduser('~/.nexusdb_history')
+        self._history   = FileHistory(history_path)
         self._completer = _NexusCompleter(self)
         self._pt_style  = Style.from_dict({"prompt": "bold cyan"})
         self._pt_kb     = self._build_keybindings()
@@ -101,7 +111,8 @@ class REPL:
             db_info = self.connector.get_info()
             db_name = os.path.basename(db_info)
             em = emoji_motor(db_type)
-            return f"[{base} | {user_prefix}{em} {db_type}: {db_name}] > "
+            tx_indicator = "[bold red]TX[/bold red] | " if self.in_transaction else ""
+            return f"[{tx_indicator}{base} | {user_prefix}{em} {db_type}: {db_name}] > "
         return f"[{base} | {user_prefix}📂 desconectado] > "
 
     def _build_keybindings(self):
@@ -130,50 +141,28 @@ class REPL:
     def _completer_readline(self, text, state):
         """Completer para readline (fallback en sistemas sin prompt_toolkit)."""
         try:
+            words = text.split()
+            last_word = words[-1] if words else text
             options = self._get_completions(text)
-            matches = [o for o in options if o.lower().startswith(text.lower())]
+            matches = sorted(list(set([o for o in options if o.lower().startswith(last_word.lower())])))
             return matches[state] if state < len(matches) else None
         except Exception:
             return None
 
     def _get_completions(self, text: str) -> list:
-        """Obtiene una lista de posibles sugerencias basadas en el texto actual"""
-        # Si no hay texto, sugerir los comandos iniciales del modo correspondiente
-        if not text.strip():
-            base_cmds = COMPLETIONS_EXTRA + ["help", "exit"]
-            if self.mode == 'rel':
-                return [
-                    "connect ", "select ", "insert into ", "update ", "delete from ",
-                    "create table ", "drop table ", "show tables", "status", "disconnect",
-                    "import ", "import_db ", "export ", "export_sql ", "export_db ",
-                    "migrate ", "validate backup ",
-                ] + base_cmds
-            else:
-                return [
-                    "connect ", "find ", "insert ", "update ", "delete ", "set ", "get ",
-                    "del ", "keys ", "show collections", "show keys", "show tables",
-                    "status", "disconnect", "import ", "import_db ", "export ",
-                    "export_sql ", "export_db ", "migrate ", "validate backup ",
-                ] + base_cmds
+        """Obtiene una lista de palabras sugeridas basadas en el texto actual"""
+        keywords = [
+            "SELECT", "FROM", "WHERE", "INSERT", "INTO", "VALUES", "UPDATE", "SET", 
+            "DELETE", "JOIN", "ON", "AND", "OR", "LIMIT", "ORDER BY", "GROUP BY", 
+            "CREATE TABLE", "DROP TABLE", "SHOW TABLES", "BEGIN", "COMMIT", "ROLLBACK",
+            "FIND", "GET", "DEL", "KEYS", "SHOW COLLECTIONS", "SHOW KEYS"
+        ]
+        custom = [
+            "connect", "disconnect", "status", "exit", "help", "panel", 
+            "search", "bookmark", "generate_erd", "export", "import", 
+            "migrate", "validate backup"
+        ] + COMPLETIONS_EXTRA
 
-        text_lower = text.lower()
-
-        # Contexto: connect
-        if text_lower.startswith("connect"):
-            if text_lower.startswith("connect "):
-                engines = ["sqlite ", "postgres ", "mysql "] if self.mode == 'rel' else ["mongodb ", "redis ", "cassandra "]
-                return [f"connect {eng}" for eng in engines]
-            else:
-                return ["connect "]
-
-        # Contexto: validate / validate backup
-        if text_lower.startswith("validate"):
-            if text_lower.startswith("validate "):
-                return ["validate backup "]
-            else:
-                return ["validate backup "]
-
-        # Contexto: Tablas de la base de datos activa
         tables = []
         if self.connector and self.connector.is_connected:
             try:
@@ -183,31 +172,27 @@ class REPL:
             except Exception:
                 pass
 
-        # Sugerir nombres de tablas/colecciones según el comando parcial
-        # Si se detecta "from ", "into ", "update ", "drop table ", "export_sql " en la línea
-        for keyword in ["from ", "into ", "update ", "drop table ", "export_sql "]:
-            if keyword in text_lower:
-                idx = text_lower.rfind(keyword)
-                # Conservar todo el comando hasta la palabra clave
-                prefix = text[:idx + len(keyword)]
-                return [prefix + tbl for tbl in tables]
+        columns = []
+        text_lower = text.lower()
+        if tables:
+            for t in tables:
+                # Si la tabla se menciona en el comando, sugerimos sus columnas
+                if t.lower() in text_lower:
+                    if t not in self._schema_cache:
+                        db_type = self.connector.get_type().lower()
+                        query = f"SELECT * FROM {t} LIMIT 0"
+                        if "postgres" in db_type:
+                            query = f'SELECT * FROM "{t}" LIMIT 0'
+                        elif "mysql" in db_type:
+                            query = f"SELECT * FROM `{t}` LIMIT 0"
+                        
+                        s, data, _ = self.connector.execute_query(query)
+                        if s and data and data.get("columns"):
+                            self._schema_cache[t] = data["columns"]
+                            
+                    columns.extend(self._schema_cache.get(t, []))
 
-        # Comandos iniciales filtrados según el modo
-        base_cmds = COMPLETIONS_EXTRA + ["help", "exit"]
-        if self.mode == 'rel':
-            return [
-                "connect ", "select ", "insert into ", "update ", "delete from ",
-                "create table ", "drop table ", "show tables", "status", "disconnect",
-                "import ", "import_db ", "export ", "export_sql ", "export_db ",
-                "migrate ", "validate backup ",
-            ] + base_cmds
-        else:
-            return [
-                "connect ", "find ", "insert ", "update ", "delete ", "set ", "get ",
-                "del ", "keys ", "show collections", "show keys", "show tables",
-                "status", "disconnect", "import ", "import_db ", "export ",
-                "export_sql ", "export_db ", "migrate ", "validate backup ",
-            ] + base_cmds
+        return keywords + custom + tables + columns
 
     def _clear_screen(self):
         """Limpia la pantalla de la terminal."""
@@ -305,6 +290,22 @@ class REPL:
             self._handle_diff(command)
         elif cmd.startswith("connect2"):
             self._connect2(command)
+        
+        # ── Transacciones ──────────────────────────────────────────────────────
+        elif cmd in ("begin", "commit", "rollback"):
+            self._handle_transaction(cmd)
+            return
+            
+        # ── Búsqueda Global, Bookmarks, ERD ────────────────────────────────────
+        elif cmd.startswith("search "):
+            self._handle_search(command)
+            return
+        elif cmd.startswith("bookmark"):
+            self._handle_bookmark(command)
+            return
+        elif cmd == "generate_erd":
+            self._handle_erd()
+            return
 
         # ── Comandos existentes ────────────────────────────────────────────────
         elif cmd.startswith("validate backup"):
@@ -358,6 +359,167 @@ class REPL:
                     self._execute_nosql_query(command)
 
     # ── Handlers de nuevos módulos ─────────────────────────────────────────────
+
+    def _handle_transaction(self, cmd: str):
+        if not self.connector or not self.connector.is_connected:
+            rprint("[bold red]ERROR:[/bold red] No hay conexión activa.")
+            return
+            
+        if self.mode != "rel":
+            rprint("[bold yellow]INFO:[/bold yellow] Transacciones explícitas solo en modo relacional.")
+            return
+            
+        success, _, err = self.connector.execute_query(cmd)
+        if success:
+            if cmd == "begin":
+                self.in_transaction = True
+                rprint("[bold green]OK: Transacción iniciada.[/bold green]")
+            elif cmd == "commit":
+                self.in_transaction = False
+                rprint("[bold green]OK: Transacción confirmada (COMMIT).[/bold green]")
+            elif cmd == "rollback":
+                self.in_transaction = False
+                rprint("[bold yellow]OK: Transacción revertida (ROLLBACK).[/bold yellow]")
+        else:
+            # Si falla un commit o rollback (ej: no hay transacción activa),
+            # limpiamos el indicador de todas formas para no trabar el prompt.
+            if cmd in ("commit", "rollback"):
+                self.in_transaction = False
+            rprint(f"[bold red]ERROR en {cmd.upper()}:[/bold red] {err}")
+
+    def _handle_search(self, command: str):
+        if not self.connector or not self.connector.is_connected:
+            rprint("[bold red]ERROR:[/bold red] No hay conexión activa.")
+            return
+            
+        import shlex
+        try:
+            parts = shlex.split(command)
+        except ValueError:
+            parts = command.split()
+            
+        if len(parts) < 2:
+            rprint("[yellow]Uso: search \"texto\"[/yellow]")
+            return
+            
+        term = parts[1]
+        
+        if self.mode != "rel":
+            rprint("[yellow]Búsqueda global soportada en modo relacional.[/yellow]")
+            return
+
+        s, tables, err = self.connector.get_tables()
+        if not s or not tables:
+            rprint("[yellow]No hay tablas o error al leerlas.[/yellow]")
+            return
+            
+        rprint(f"[bold blue]🔍 Buscando '{term}' en {len(tables)} tablas...[/bold blue]")
+        
+        safe_term = term.replace("'", "''")
+        match_count = 0
+        db_type = self.connector.get_type().lower()
+        
+        for table in tables:
+            query_col = f"SELECT * FROM {table} LIMIT 0"
+            if "postgres" in db_type:
+                query_col = f'SELECT * FROM "{table}" LIMIT 0'
+            elif "mysql" in db_type:
+                query_col = f"SELECT * FROM `{table}` LIMIT 0"
+                
+            s, data, err = self.connector.execute_query(query_col)
+            if not s or not data or not data.get("columns"):
+                continue
+            
+            columns = data["columns"]
+            where_clauses = []
+            
+            for col in columns:
+                if "postgres" in db_type:
+                    where_clauses.append(f'CAST("{col}" AS TEXT) ILIKE \'%{safe_term}%\'')
+                elif "mysql" in db_type:
+                    where_clauses.append(f"`{col}` LIKE '%{safe_term}%'")
+                else:
+                    where_clauses.append(f"CAST(\"{col}\" AS TEXT) LIKE '%{safe_term}%'")
+            
+            if not where_clauses:
+                continue
+                
+            where_sql = " OR ".join(where_clauses)
+            
+            query = f"SELECT * FROM {table} WHERE {where_sql} LIMIT 50"
+            if "postgres" in db_type:
+                query = f'SELECT * FROM "{table}" WHERE {where_sql} LIMIT 50'
+            elif "mysql" in db_type:
+                query = f"SELECT * FROM `{table}` WHERE {where_sql} LIMIT 50"
+                
+            s, data, err = self.connector.execute_query(query)
+            if s and data and data.get("rows"):
+                rprint(f"\n[bold green]✅ Coincidencias en la tabla '{table}' ({len(data['rows'])} filas):[/bold green]")
+                self.formatter.print_table(data["columns"], data["rows"])
+                match_count += 1
+                
+        if match_count == 0:
+            rprint("[yellow]No se encontraron resultados en ninguna tabla.[/yellow]")
+
+    def _handle_bookmark(self, command: str):
+        parts = command.strip().split(None, 2)
+        if len(parts) < 2:
+            rprint("[yellow]Uso: bookmark list | bookmark save <alias> \"<sql>\" | bookmark run <alias> | bookmark delete <alias>[/yellow]")
+            return
+            
+        action = parts[1].lower()
+        
+        if action == "list":
+            self.bookmark_mgr.list_all()
+        elif action == "delete" and len(parts) >= 3:
+            if self.bookmark_mgr.delete(parts[2]):
+                exito(f"Bookmark '{parts[2]}' eliminado.")
+            else:
+                rprint(f"[red]No se encontró el bookmark '{parts[2]}'.[/red]")
+        elif action == "save" and len(parts) >= 3:
+            import shlex
+            subparts = shlex.split(parts[2])
+            if len(subparts) >= 2:
+                alias = subparts[0]
+                sql = subparts[1]
+                if self.bookmark_mgr.add(alias, sql):
+                    exito(f"Bookmark '{alias}' guardado.")
+            else:
+                rprint("[yellow]Uso: bookmark save <alias> \"<sql>\"[/yellow]")
+        elif action == "run" and len(parts) >= 3:
+            alias = parts[2]
+            sql = self.bookmark_mgr.get(alias)
+            if sql:
+                rprint(f"[cyan]Ejecutando '{alias}':[/cyan] [white]{sql}[/white]")
+                self.execute(sql)
+            else:
+                rprint(f"[red]No se encontró el bookmark '{alias}'.[/red]")
+        else:
+            rprint("[red]Acción desconocida o parámetros incompletos.[/red]")
+
+    def _handle_erd(self):
+        if not self.connector or not self.connector.is_connected:
+            rprint("[bold red]ERROR:[/bold red] No hay conexión activa.")
+            return
+        if self.mode != "rel":
+            rprint("[yellow]Los diagramas ERD solo están soportados en modo relacional.[/yellow]")
+            return
+            
+        rprint("[blue]Generando diagrama ERD...[/blue]")
+        mermaid_code = generar_diagrama(self.connector)
+        
+        if not mermaid_code:
+            rprint("[yellow]No se pudo generar el diagrama. ¿Hay tablas en la BD?[/yellow]")
+            return
+            
+        filename = "diagrama_erd.md"
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write("```mermaid\n")
+            f.write(mermaid_code)
+            f.write("\n```\n")
+            
+        rprint(f"[bold green]✅ Diagrama guardado en '{filename}'.[/bold green]")
+        rprint("[dim]Puedes visualizarlo con extensiones de Markdown o PlantUML/Mermaid en tu editor.[/dim]")
 
     def _handle_ai(self, command: str):
         """Asistente de lenguaje natural → SQL."""
@@ -1012,7 +1174,7 @@ class REPL:
         if success:
             if data and 'columns' in data and data['columns']:
                 self.last_results = data  # Guardar para exportación
-                self.formatter.print_table(data['columns'], data['rows'])
+                self.formatter.print_table(data['columns'], data['rows'], paginate=True)
                 rprint(f"\n[bold cyan]INFO: Total:[/bold cyan] [white]{len(data['rows'])} fila(s)[/white]")
             elif data and 'affected_rows' in data:
                 rprint(f"[bold green]OK: Éxito:[/bold green] [white]{data['affected_rows']} fila(s) afectada(s)[/white]")
@@ -1022,7 +1184,7 @@ class REPL:
             rprint(f"[bold red]ERROR SQL:[/bold red] [white]{error}[/white]")
 
     def _export(self, command: str):
-        """Exporta los últimos resultados a un archivo CSV"""
+        """Exporta los últimos resultados a un archivo CSV, JSON o TXT"""
         parts = command.split()
         if len(parts) < 2:
             rprint("[bold red]ERROR:[/bold red] Debes especificar un nombre de archivo. [yellow]Ej: export resultados.csv[/yellow]")
@@ -1034,10 +1196,23 @@ class REPL:
 
         filename = parts[1]
         try:
-            with open(filename, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow(self.last_results['columns'])
-                writer.writerows(self.last_results['rows'])
+            if filename.endswith(".json"):
+                import json
+                rows = self.last_results['rows']
+                cols = self.last_results['columns']
+                data_list = [dict(zip(cols, row)) for row in rows]
+                with open(filename, 'w', encoding='utf-8') as f:
+                    json.dump(data_list, f, indent=4, default=str)
+            elif filename.endswith(".txt") or filename.endswith(".md"):
+                from rich.console import Console
+                with open(filename, 'w', encoding='utf-8') as f:
+                    f_console = Console(file=f, force_terminal=False)
+                    self.formatter.print_table(self.last_results['columns'], self.last_results['rows'], custom_console=f_console)
+            else:
+                with open(filename, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(self.last_results['columns'])
+                    writer.writerows(self.last_results['rows'])
             rprint(f"[bold green]OK: Datos exportados correctamente a:[/bold green] [white]{filename}[/white]")
         except Exception as e:
             rprint(f"[bold red]ERROR al exportar:[/bold red] {e}")

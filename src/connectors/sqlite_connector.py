@@ -26,7 +26,9 @@ class SQLiteConnector(BaseConnector):
             raise ValueError("Se requiere db_path")
 
         try:
-            self.connection = sqlite3.connect(db_path)
+            # isolation_level=None activa el modo autocommit nativo de sqlite3
+            # Esto permite usar BEGIN, COMMIT y ROLLBACK explícitamente sin interferencias del driver.
+            self.connection = sqlite3.connect(db_path, isolation_level=None)
             self.cursor = self.connection.cursor()
             self.is_connected = True
             self.db_path = db_path
@@ -66,13 +68,10 @@ class SQLiteConnector(BaseConnector):
                 return True, {'columns': columns, 'rows': rows}, ""
             else:
                 # Comandos que no devuelven filas
-                self.connection.commit()
                 affected = self.cursor.rowcount
                 return True, {'affected_rows': affected}, ""
                 
         except sqlite3.Error as e:
-            if self.connection:
-                self.connection.rollback()
             return False, None, str(e)
 
     def get_tables(self) -> Tuple[bool, List[str], str]:

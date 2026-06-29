@@ -34,11 +34,11 @@ def mostrar_panel(connector) -> None:
     db_type = connector.get_type().lower()
 
     if "postgres" in db_type:
-        _mostrar_relacional(connector, _QUERY_POSTGRES,
+        _mostrar_relacional_live(connector, _QUERY_POSTGRES,
                             ["#", "Consulta", "Tiempo (s)", "Estado", "Usuario"])
 
     elif "mysql" in db_type:
-        _mostrar_relacional(connector, _QUERY_MYSQL,
+        _mostrar_relacional_live(connector, _QUERY_MYSQL,
                             ["#", "Usuario", "Comando", "Tiempo (s)", "Consulta"])
 
     elif "sqlite" in db_type:
@@ -76,28 +76,41 @@ def mostrar_panel(connector) -> None:
         console.print(f"[red]Motor desconocido: {db_type}[/red]")
 
 
-def _mostrar_relacional(connector, query: str, col_names: list) -> None:
-    success, data, error = connector.execute_query(query)
+def _mostrar_relacional_live(connector, query: str, col_names: list) -> None:
+    from rich.live import Live
+    import time
+    
+    console.print("[yellow]Panel de rendimiento en vivo. Presiona Ctrl+C para salir.[/yellow]")
+    
+    def generate_table():
+        success, data, error = connector.execute_query(query)
 
-    table = Table(
-        title="⚡ Consultas Activas",
-        border_style="blue",
-        show_lines=True
-    )
-    for col in col_names:
-        table.add_column(col, overflow="fold")
+        table = Table(
+            title="⚡ Consultas Activas (Actualización cada 2s)",
+            border_style="blue",
+            show_lines=True
+        )
+        for col in col_names:
+            table.add_column(col, overflow="fold")
 
-    if not success:
-        console.print(f"[red]Error al consultar procesos: {error}[/red]")
-        return
+        if not success:
+            table.add_row(f"[red]Error al consultar procesos: {error}[/red]")
+            return table
 
-    rows = data.get("rows", []) if data else []
-    if not rows:
-        console.print("[green]✅ No hay consultas lentas activas.[/green]")
-        return
+        rows = data.get("rows", []) if data else []
+        if not rows:
+            table.add_row("[green]✅ No hay consultas lentas activas.[/green]")
+            return table
 
-    for i, row in enumerate(rows, 1):
-        table.add_row(str(i), *[str(v)[:70] if v is not None else "NULL" for v in row[1:]])
+        for i, row in enumerate(rows, 1):
+            table.add_row(str(i), *[str(v)[:70] if v is not None else "NULL" for v in row[1:]])
+            
+        return table
 
-    console.print(table)
-    console.print(f"[dim]{len(rows)} proceso(s) mostrado(s)[/dim]")
+    try:
+        with Live(generate_table(), refresh_per_second=1, console=console) as live:
+            while True:
+                time.sleep(2)
+                live.update(generate_table())
+    except KeyboardInterrupt:
+        console.print("[dim]Saliendo del panel en vivo...[/dim]")

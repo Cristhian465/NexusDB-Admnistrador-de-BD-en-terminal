@@ -1,4 +1,8 @@
-from cassandra.cluster import Cluster
+try:
+    from cassandra.cluster import Cluster
+except Exception as e:
+    Cluster = None
+    _cassandra_import_error = str(e)
 from typing import Any, Tuple, List
 from .nosql_base import BaseNoSQLConnector
 
@@ -13,6 +17,9 @@ class CassandraConnector(BaseNoSQLConnector):
         self.keyspace = ""
 
     def connect(self, **kwargs) -> bool:
+        if Cluster is None:
+            raise ConnectionError(f"El driver de Cassandra no es compatible con este entorno (Python 3.12+ eliminó asyncore): {_cassandra_import_error}")
+            
         try:
             self.host = kwargs.get('host', 'localhost')
             self.keyspace = kwargs.get('keyspace', '')
